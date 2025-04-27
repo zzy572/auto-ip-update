@@ -32,6 +32,21 @@ def format_ip_line(line):
         return f'{ip}{port}{rest}'
     return line
 
+def ensure_remark(line, remark):
+    if '#' in line:
+        return line
+    # 自动补备注为#IP
+    # 提取IPv4或IPv6地址
+    ipv4 = re.match(r'(\d+\.\d+\.\d+\.\d+)', line)
+    ipv6 = re.match(r'\[?([0-9a-fA-F:]+)\]?', line)
+    if ipv4:
+        tag = ipv4.group(1)
+    elif ipv6:
+        tag = ipv6.group(1)
+    else:
+        tag = '无备注'
+    return f"{line}#{tag}"
+
 def parse_api_content(url, remark, text):
     text = re.sub(r'<script[\s\S]*?</script>', '', text, flags=re.I)
     text = re.sub(r'<style[\s\S]*?</style>', '', text, flags=re.I)
@@ -39,6 +54,7 @@ def parse_api_content(url, remark, text):
     lines = [l.strip() for l in text.splitlines() if l.strip()]
     if 'ip.164746.xyz' in url and '#' in text:
         valid_lines = [format_ip_line(l) for l in lines if is_valid_ip_line(l)]
+        valid_lines = [ensure_remark(l, remark) for l in valid_lines]
         return valid_lines
     if 'cf.090227.xyz' in url:
         result = [
@@ -51,12 +67,15 @@ def parse_api_content(url, remark, text):
             if m:
                 net, ip, speed = m.groups()
                 result.append(f'{ip}:443#{net}分流-{ip}')
-        return [l for l in result if is_valid_ip_line(l)]
+        result = [ensure_remark(l, remark) for l in result]
+        return result
     if any(x in url for x in ['/ct', '/CloudFlareYes']):
         valid_lines = [format_ip_line(l) for l in lines if is_valid_ip_line(l)]
+        valid_lines = [ensure_remark(l, remark) for l in valid_lines]
         return valid_lines
     if 'cmcc-ipv6' in url:
         valid_lines = [format_ip_line(l) for l in lines if is_valid_ip_line(l)]
+        valid_lines = [ensure_remark(l, remark) for l in valid_lines]
         return valid_lines
     if 'ip.164746.xyz' in url and 'IP地址' in text:
         result = []
@@ -66,8 +85,12 @@ def parse_api_content(url, remark, text):
                 ip = m.group(2)
                 speed = m.group(3)
                 result.append(f'{ip}:443#{ip} | ⬇️ {speed}')
-        return [l for l in result if is_valid_ip_line(l)]
-    return [format_ip_line(l) for l in lines if is_valid_ip_line(l)]
+        result = [ensure_remark(l, remark) for l in result]
+        return result
+    # 末尾统一处理所有输出行，保证带#备注
+    lines_out = [format_ip_line(l) for l in lines if is_valid_ip_line(l)]
+    lines_out = [ensure_remark(l, remark) for l in lines_out]
+    return lines_out
 
 def main():
     if not os.path.exists(API_CONFIG_FILE):
